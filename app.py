@@ -35,7 +35,7 @@ def generate_haccp_data(menu):
 
     # 2. Kategori Daging / Ayam / Unggas
     elif any(k in m for k in ["ayam", "daging", "sapi", "kambing", "unggas"]):
-        alergen = "Tidak mengandung alergen utama (kecuali ada tambahan bumbu kedelai/kemiri)."
+        alergen = "Tidak mengandung alergen utama."
         rentan = "Balita, lansia, dan ibu hamil wajib menerima daging matang sempurna (suhu inti >= 74°C)."
         penerimaan_bahaya = "Biologi: Salmonella spp., E. coli, & Listeria monocytogenes\nFisik: Bau lendir, memar, atau tekstur lembek"
         penerimaan_batas = "Suhu penerimaan Chiller <= 4°C atau Freezer <= -18°C, tidak berbau busuk"
@@ -96,7 +96,7 @@ with tab1:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown(f"**Nama Produk:** {nama_menu}")
-        st.markdown(f"**Komposisi Utama:** {nama_menu}, Bumbu, Air/Minyak, Garam")
+        st.markdown(f"**Komposisi Utama:** {nama_menu} (100% Bahan Tunggal)")
         st.markdown("**Karakteristik Biokimia:** Aw > 0.92, pH 5.5 - 6.8 (Risiko tinggi mikroba)")
     with col2:
         st.markdown("**Metode Pengolahan:** Persiapan, Pemotongan/Pencucian, & Pemasakan Termal")
