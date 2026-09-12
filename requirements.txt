@@ -1,5 +1,8 @@
+
 streamlit
 pandas
 openpyxl
+reportlab
 requests
-pillow
+openai
+Pillow
