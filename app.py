@@ -100,7 +100,7 @@ with tab1:
         st.markdown("**Karakteristik Biokimia:** Aw > 0.92, pH 5.5 - 6.8 (Risiko tinggi mikroba)")
     with col2:
         st.markdown("**Metode Pengolahan:** Persiapan, Pemotongan/Pencucian, & Pemasakan Termal")
-        st.markdown("**Kemasan:** Insulated Stainless Container / Food Grade Box")
+        st.markdown("**Kemasan:** Ompreng (Food Grade)")
         st.markdown("**Masa Simpan:** Max 2 jam (Suhu Ruang), Max 4 jam (Hot Warmer >= 60°C)")
 
     st.markdown("### 3. Rencana Penggunaan (Intended Use) & Analisis Risiko Konsumen")
