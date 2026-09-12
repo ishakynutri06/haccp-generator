@@ -13,53 +13,66 @@ st.caption("Standar Keamanan Pangan Codex Alimentarius / SNI ISO 22000")
 
 # Sidebar Input
 st.sidebar.header("Pengaturan Operasional")
-nama_menu = st.sidebar.text_input("Nama Bahan / Menu", value="Ayam Goreng")
+nama_menu = st.sidebar.text_input("Nama Bahan / Menu", value="Bayam")
 nama_dapur = st.sidebar.text_input("Nama Fasilitas / Dapur", value="Dapur Satuan Pelayanan MBG")
 penanggung_jawab = st.sidebar.text_input("Penanggung Jawab / Ketua Tim", value="Ishak Yunus")
 
-# Logic Generator Berdasarkan Katagori Bahan
+# Logic Generator Berdasarkan Kategori Bahan
 def generate_haccp_data(menu):
-    menu_lower = menu.lower()
+    m = menu.lower()
     
-    # Kategori: Daging / Ayam
-    if any(k in menu_lower for k in ["ayam", "daging", "sapi", "kambing", "unggas"]):
-        alergen = "Tidak mengandung alergen utama (kecuali ada tambahan bumbu/kemiri/kedelai)."
-        rentan = "Balita, lansia, dan ibu hamil wajib menerima daging matang sempurna (suhu inti >= 74°C) untuk mencegah Salmonella spp. dan Campylobacter."
+    # 1. Kategori Sayuran & Nabati
+    if any(k in m for k in ["bayam", "kangkung", "sayur", "sop", "tumis", "tahu", "tempe", "wortel", "buncis"]):
+        alergen = "Bebas alergen utama (kecuali kedelai jika ada Tahu/Tempe)."
+        rentan = "Wajib dicuci bersih dengan air mengalir untuk menghilangkan tanah, parasit (Ascaris), dan residu pestisida."
+        penerimaan_bahaya = "Biologi: Kontaminasi Bacillus cereus & parasit tanah\nKimia: Residu pestisida\nFisik: Daun busuk, ulat, & tanah/pasir"
+        penerimaan_batas = "Segar, bebas hama/ulat, tidak ada bau pembusukan, kondisi fisik utuh"
+        
+        tahap_ccp1 = "Pencucian & Perebusan/Pemasakan Sayur"
+        bahaya_ccp1 = "Biologi: Kelangsungan hidup Bacillus cereus & kontaminasi silang tanah\nKimia: Residu pestisida"
+        batas_ccp1 = "Pencucian air mengalir bersih & Pemasakan suhu inti >= 70°C"
+        koreksi_ccp1 = "Cuci ulang dengan air bersih mengalir; lanjutkan pemanasan hingga matang"
+
+    # 2. Kategori Daging / Ayam / Unggas
+    elif any(k in m for k in ["ayam", "daging", "sapi", "kambing", "unggas"]):
+        alergen = "Tidak mengandung alergen utama (kecuali ada tambahan bumbu kedelai/kemiri)."
+        rentan = "Balita, lansia, dan ibu hamil wajib menerima daging matang sempurna (suhu inti >= 74°C)."
+        penerimaan_bahaya = "Biologi: Salmonella spp., E. coli, & Listeria monocytogenes\nFisik: Bau lendir, memar, atau tekstur lembek"
+        penerimaan_batas = "Suhu penerimaan Chiller <= 4°C atau Freezer <= -18°C, tidak berbau busuk"
+        
         tahap_ccp1 = "Pemasakan / Ungkep / Goreng"
-        bahaya_ccp1 = "Biologi: Kelangsungan hidup Salmonella spp., E. coli, & Listeria monocytogenes"
+        bahaya_ccp1 = "Biologi: Kelangsungan hidup Salmonella spp. & E. coli"
         batas_ccp1 = "Suhu inti daging >= 74°C minimal 15 detik"
         koreksi_ccp1 = "Lanjutkan pemasakan hingga suhu inti mencapai >= 74°C"
-        
-    # Kategori: Ikan / Seafood
-    elif any(k in menu_lower for k in ["ikan", "udang", "cumi", "seafood", "tongkol", "layang"]):
+
+    # 3. Kategori Ikan / Seafood
+    elif any(k in m for k in ["ikan", "udang", "cumi", "seafood", "tongkol", "layang", "gurame"]):
         alergen = "MENGANDUNG ALERGEN UTAMA (IKAN / SEAFOOD)."
-        rentan = "Wajib dipastikan kesegarannya (bebas histamin) dan dimasak matang sempurna."
-        tahap_ccp1 = "Pemasakan / Penggorengan / Perebusan"
-        bahaya_ccp1 = "Biologi: Vibrio parahaemolyticus & Histamin (akibat pembusukan awal)"
+        rentan = "Wajib dipastikan kesegarannya (bebas pembentukan histamin) dan dimasak matang sempurna."
+        penerimaan_bahaya = "Biologi: Vibrio parahaemolyticus\nKimia: Histamin & Logam berat\nFisik: Mata suram, insang pucat"
+        penerimaan_batas = "Ikan segar (mata jernih, kenyal), suhu penerimaan <= 4°C dengan es"
+        
+        tahap_ccp1 = "Pemasakan / Penggorengan / Perebusan Ikan"
+        bahaya_ccp1 = "Biologi: Vibrio parahaemolyticus & Histamin (akibat pembusukan)"
         batas_ccp1 = "Suhu inti produk >= 74°C minimal 15 detik"
-        koreksi_ccp1 = "Lanjutkan pemasakan hingga matang sempurna; tolak ikan jika bau busuk di awal penerimaan"
+        koreksi_ccp1 = "Lanjutkan pemanasan; tolak ikan sejak awal jika sudah ada indikasi busuk"
 
-    # Kategori: Sayuran / Tahu / Tempe
-    elif any(k in menu_lower for k in ["sayur", "tahu", "tempe", "tumis", "sop", "bayam", "kangkung"]):
-        alergen = "Mengandung Kedelai (pada Tahu/Tempe). Bebas alergen untuk sayuran murni."
-        rentan = "Sayuran harus dicuci bersih dengan air mengalir untuk menghilangkan residu pestisida & tanah."
-        tahap_ccp1 = "Pencucian & Pemasakan"
-        bahaya_ccp1 = "Kimia: Residu pestisida / Biologi: Bacillus cereus & kontaminasi tanah"
-        batas_ccp1 = "Pencucian air mengalir & Pemasakan suhu inti >= 70°C"
-        koreksi_ccp1 = "Cuci ulang dengan air mengalir / Lanjutkan pemanasan"
-
-    # Default / Terigu / Telur / Lainnya
+    # 4. Kategori Telur / Default
     else:
-        alergen = "MENGANDUNG ALERGEN UTAMA (TELUR / PROTEIN)."
-        rentan = "Balita dan lansia wajib menerima produk matang sempurna (suhu inti >= 74°C)."
-        tahap_ccp1 = "Pemasakan / Pengolahan Utama"
-        bahaya_ccp1 = "Biologi: Salmonella spp. & Staphylococcal enterotoxin"
-        batas_ccp1 = "Suhu inti produk >= 74°C minimal 15 detik"
-        koreksi_ccp1 = "Lanjutkan pemanasan hingga mencapai suhu >= 74°C"
+        alergen = "MENGANDUNG ALERGEN UTAMA (TELUR)."
+        rentan = "Balita dan lansia wajib menerima produk telur matang sempurna (suhu inti >= 74°C)."
+        penerimaan_bahaya = "Biologi: Salmonella enteritidis pada cangkang\nFisik: Cangkang retak, kotoran menempel"
+        penerimaan_batas = "Cangkang bersih, utuh, tidak retak, tidak berbau busuk"
+        
+        tahap_ccp1 = "Pemasakan / Pengolahan Telur"
+        bahaya_ccp1 = "Biologi: Kelangsungan hidup Salmonella enteritidis"
+        batas_ccp1 = "Suhu inti produk >= 74°C (putih & kuning telur memadat)"
+        koreksi_ccp1 = "Lanjutkan pemanasan hingga telur matang sempurna"
 
-    return alergen, rentan, tahap_ccp1, bahaya_ccp1, batas_ccp1, koreksi_ccp1
+    return alergen, rentan, penerimaan_bahaya, penerimaan_batas, tahap_ccp1, bahaya_ccp1, batas_ccp1, koreksi_ccp1
 
-alergen_info, rentan_info, ccp1_tahap, ccp1_bahaya, ccp1_batas, ccp1_koreksi = generate_haccp_data(nama_menu)
+# Jalankan Logika Deteksi
+alergen_info, rentan_info, pen_bahaya, pen_batas, ccp1_tahap, ccp1_bahaya, ccp1_batas, ccp1_koreksi = generate_haccp_data(nama_menu)
 
 # Tampilan Utama
 st.header(f"📋 Rencana HACCP: {nama_menu}")
@@ -83,10 +96,10 @@ with tab1:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown(f"**Nama Produk:** {nama_menu}")
-        st.markdown(f"**Komposisi Utama:** {nama_menu}, Bumbu, Minyak Goreng, Garam")
+        st.markdown(f"**Komposisi Utama:** {nama_menu}, Bumbu, Air/Minyak, Garam")
         st.markdown("**Karakteristik Biokimia:** Aw > 0.92, pH 5.5 - 6.8 (Risiko tinggi mikroba)")
     with col2:
-        st.markdown("**Metode Pengolahan:** Persiapan, Pemotongan/Pembersihan, & Pemasakan Termal")
+        st.markdown("**Metode Pengolahan:** Persiapan, Pemotongan/Pencucian, & Pemasakan Termal")
         st.markdown("**Kemasan:** Insulated Stainless Container / Food Grade Box")
         st.markdown("**Masa Simpan:** Max 2 jam (Suhu Ruang), Max 4 jam (Hot Warmer >= 60°C)")
 
@@ -96,12 +109,12 @@ with tab1:
     - **Kelompok Rentan (Vulnerable Group):** {rentan_info}
     - **Status Alergen:** {alergen_info}
     - **Cara Penyajian:** Siap santap (Ready-to-Eat / RTE).
-    - **Potensi Penyalahgunaan:** Disimpan pada suhu ruang > 2 jam tanpa pemanasan ulang, atau dikonsumsi dingin setelah terkontaminasi lingkungan.
+    - **Potensi Penyalahgunaan:** Disimpan pada suhu ruang > 2 jam tanpa pemanasan ulang.
     ''')
 
     st.markdown("### 4. Diagram Alir Proses")
     st.code(f'''
-[ Penerimaan {nama_menu} ] -> [ Penyimpanan Cold Room / Chiller ]
+[ Penerimaan {nama_menu} ] -> [ Penyimpanan Segar / Chiller ]
                                      │
                                      ▼
 [ Pemorsian & Hot Holding >= 60°C ] <- [ {ccp1_tahap} (CCP 1) ] <- [ Persiapan / Pencucian / Penimbangan ]
@@ -119,18 +132,18 @@ with tab2:
     df_haccp = pd.DataFrame([
         {
             "Tahap Proses": f"Penerimaan {nama_menu}",
-            "Bahaya Potensial": "Biologi: Kontaminasi awal mikroba patogen\nFisik: Benda asing, fisik rusak/busuk",
+            "Bahaya Potensial": pen_bahaya,
             "Kategori CCP": "PRP / GHP",
-            "Batas Kritis": "Karakteristik fisik segar, suhu penerimaan sesuai standar (Chiller <= 4°C)",
-            "Pemantauan (Monitoring)": "Visual inspeksi & cek suhu penerimaan tiap lot",
-            "Tindakan Koreksi": "Tolak pengiriman jika busuk/rusak/suhu tidak sesuai"
+            "Batas Kritis": pen_batas,
+            "Pemantauan (Monitoring)": "Inspeksi visual & cek kondisi fisik tiap penerimaan",
+            "Tindakan Koreksi": "Tolak bahan baku jika rusak, kotor, atau tidak sesuai standar"
         },
         {
             "Tahap Proses": ccp1_tahap,
             "Bahaya Potensial": ccp1_bahaya,
             "Kategori CCP": "CCP 1",
             "Batas Kritis": ccp1_batas,
-            "Pemantauan (Monitoring)": "Ukur suhu inti dengan probe thermometer tiap batch",
+            "Pemantauan (Monitoring)": "Ukur suhu inti pemanasan & pantau waktu pencucian/pemasakan",
             "Tindakan Koreksi": ccp1_koreksi
         },
         {
