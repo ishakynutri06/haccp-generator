@@ -24,7 +24,7 @@ def generate_haccp_data(menu):
     # 1. Kategori Sayuran & Nabati
     if any(k in m for k in ["bayam", "kangkung", "sayur", "sop", "tumis", "tahu", "tempe", "wortel", "buncis"]):
         alergen = "Bebas alergen utama (kecuali kedelai jika ada Tahu/Tempe)."
-        rentan = "Wajib dicuci bersih dengan air mengalir untuk menghilangkan tanah, parasit (Ascaris), dan residu pestisida."
+        rentan = "Anak-anak, balita, lansia, dan individu dengan sistem imun rendah (sensitif terhadap residu pestisida & bakteri tanah)."
         penerimaan_bahaya = "Biologi: Kontaminasi Bacillus cereus & parasit tanah\nKimia: Residu pestisida\nFisik: Daun busuk, ulat, & tanah/pasir"
         penerimaan_batas = "Segar, bebas hama/ulat, tidak ada bau pembusukan, kondisi fisik utuh"
         
@@ -36,7 +36,7 @@ def generate_haccp_data(menu):
     # 2. Kategori Daging / Ayam / Unggas
     elif any(k in m for k in ["ayam", "daging", "sapi", "kambing", "unggas"]):
         alergen = "Tidak mengandung alergen utama."
-        rentan = "Balita, lansia, dan ibu hamil wajib menerima daging matang sempurna (suhu inti >= 74°C)."
+        rentan = "Balita, lansia, ibu hamil, dan individu imunokompromais (risiko infeksi Salmonella & Listeria)."
         penerimaan_bahaya = "Biologi: Salmonella spp., E. coli, & Listeria monocytogenes\nFisik: Bau lendir, memar, atau tekstur lembek"
         penerimaan_batas = "Suhu penerimaan Chiller <= 4°C atau Freezer <= -18°C, tidak berbau busuk"
         
@@ -48,7 +48,7 @@ def generate_haccp_data(menu):
     # 3. Kategori Ikan / Seafood
     elif any(k in m for k in ["ikan", "udang", "cumi", "seafood", "tongkol", "layang", "gurame"]):
         alergen = "MENGANDUNG ALERGEN UTAMA (IKAN / SEAFOOD)."
-        rentan = "Wajib dipastikan kesegarannya (bebas pembentukan histamin) dan dimasak matang sempurna."
+        rentan = "Individu dengan alergi makanan laut, balita, dan lansia."
         penerimaan_bahaya = "Biologi: Vibrio parahaemolyticus\nKimia: Histamin & Logam berat\nFisik: Mata suram, insang pucat"
         penerimaan_batas = "Ikan segar (mata jernih, kenyal), suhu penerimaan <= 4°C dengan es"
         
@@ -60,7 +60,7 @@ def generate_haccp_data(menu):
     # 4. Kategori Telur / Default
     else:
         alergen = "MENGANDUNG ALERGEN UTAMA (TELUR)."
-        rentan = "Balita dan lansia wajib menerima produk telur matang sempurna (suhu inti >= 74°C)."
+        rentan = "Balita, anak-anak, lansia, dan ibu hamil."
         penerimaan_bahaya = "Biologi: Salmonella enteritidis pada cangkang\nFisik: Cangkang retak, kotoran menempel"
         penerimaan_batas = "Cangkang bersih, utuh, tidak retak, tidak berbau busuk"
         
