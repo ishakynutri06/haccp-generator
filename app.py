@@ -1,1501 +1,1337 @@
-
 import streamlit as st
 import pandas as pd
-import io
 import requests
+import json
+import io
 import re
+from datetime import datetime
 from urllib.parse import quote
 
+from openai import OpenAI
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.units import cm
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle,
+    PageBreak,
+    Image
+)
+
+
 # =========================================================
-# GENERATOR HACCP V2
-# Codex HACCP / ISO 22000 - Rancangan untuk Validasi Tim
+# KONFIGURASI HALAMAN
 # =========================================================
 
 st.set_page_config(
-    page_title="Generator HACCP Otomatis",
-    page_icon="🛡️",
+    page_title="Generator HACCP Per Bahan",
+    page_icon="🧪",
     layout="wide"
 )
 
-st.title("🛡️ Generator Dokumen HACCP Otomatis")
-st.caption(
-    "Codex HACCP / SNI ISO 22000 | "
-    "Rancangan keamanan pangan untuk validasi Tim HACCP"
-)
 
 # =========================================================
-# DATABASE BAHAN
+# FUNGSI DASAR
 # =========================================================
 
-BAHAN_DB = {
-
-    "bayam": {
-        "nama": "Bayam",
-        "nama_produk": "Sayur Bayam Matang",
-        "nama_inggris": "Spinach",
-        "kategori": "Sayuran Daun",
-        "alergen": "Tidak termasuk alergen utama yang umum diakui Codex",
-        "penyimpanan": "Bahan segar sesuai spesifikasi dan pengendalian suhu",
-        "karakteristik": "Sayuran daun segar, mudah rusak, siap dimasak",
-        "bahaya": [
-            {
-                "kategori": "Biologi",
-                "bahaya": "Mikroorganisme patogen dari tanah dan air",
-                "sumber": "Tanah, air, pekerja, peralatan",
-                "keparahan": 3,
-                "kemungkinan": 3,
-                "pengendalian": "Pemasok disetujui, air layak, sortasi, pencucian, pemasakan"
-            },
-            {
-                "kategori": "Kimia",
-                "bahaya": "Residu pestisida",
-                "sumber": "Budidaya dan bahan baku",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Pemasok disetujui dan pemeriksaan bahan"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Tanah, pasir, ulat, dan benda asing",
-                "sumber": "Bahan baku",
-                "keparahan": 2,
-                "kemungkinan": 3,
-                "pengendalian": "Sortasi dan pencucian"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan bahan segar",
-            "Sortasi",
-            "Pencucian",
-            "Pemotongan",
-            "Pemasakan",
-            "Holding",
-            "Pemorsian",
-            "Distribusi"
-        ]
-    },
-
-    "kangkung": {
-        "nama": "Kangkung",
-        "nama_produk": "Olahan Kangkung Matang",
-        "nama_inggris": "Water spinach",
-        "kategori": "Sayuran Daun",
-        "alergen": "Tidak termasuk alergen utama yang umum diakui Codex",
-        "penyimpanan": "Bahan segar sesuai spesifikasi",
-        "karakteristik": "Sayuran daun segar, mudah rusak",
-        "bahaya": [
-            {
-                "kategori": "Biologi",
-                "bahaya": "Mikroorganisme patogen dari tanah dan air",
-                "sumber": "Tanah, air, pekerja, peralatan",
-                "keparahan": 3,
-                "kemungkinan": 3,
-                "pengendalian": "Pemasok disetujui, air layak, pencucian, pemasakan"
-            },
-            {
-                "kategori": "Kimia",
-                "bahaya": "Residu pestisida",
-                "sumber": "Budidaya",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Pemasok disetujui dan pemeriksaan bahan"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Tanah, pasir, ulat, dan benda asing",
-                "sumber": "Bahan baku",
-                "keparahan": 2,
-                "kemungkinan": 3,
-                "pengendalian": "Sortasi dan pencucian"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan bahan segar",
-            "Sortasi",
-            "Pencucian",
-            "Pemotongan",
-            "Pemasakan",
-            "Holding",
-            "Pemorsian",
-            "Distribusi"
-        ]
-    },
-
-    "wortel": {
-        "nama": "Wortel",
-        "nama_produk": "Olahan Wortel Matang",
-        "nama_inggris": "Carrot",
-        "kategori": "Sayuran Umbi",
-        "alergen": "Tidak termasuk alergen utama yang umum diakui Codex",
-        "penyimpanan": "Bahan segar sesuai spesifikasi",
-        "karakteristik": "Sayuran umbi segar",
-        "bahaya": [
-            {
-                "kategori": "Biologi",
-                "bahaya": "Mikroorganisme patogen dari tanah dan air",
-                "sumber": "Tanah, air, bahan baku",
-                "keparahan": 3,
-                "kemungkinan": 3,
-                "pengendalian": "Pemasok disetujui, sortasi, pencucian, pemasakan"
-            },
-            {
-                "kategori": "Kimia",
-                "bahaya": "Residu pestisida",
-                "sumber": "Budidaya",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Pemasok disetujui dan pemeriksaan bahan"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Tanah, pasir, dan benda asing",
-                "sumber": "Bahan baku",
-                "keparahan": 2,
-                "kemungkinan": 3,
-                "pengendalian": "Sortasi dan pencucian"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan bahan segar",
-            "Sortasi",
-            "Pencucian",
-            "Pengupasan",
-            "Pemotongan",
-            "Pemasakan",
-            "Holding",
-            "Pemorsian",
-            "Distribusi"
-        ]
-    },
-
-    "ayam": {
-        "nama": "Ayam",
-        "nama_produk": "Olahan Ayam Matang",
-        "nama_inggris": "Chicken",
-        "kategori": "Daging Unggas",
-        "alergen": "Tidak termasuk alergen utama apabila tidak ada bahan tambahan alergen",
-        "penyimpanan": "Chiller/freezer sesuai spesifikasi dan SOP",
-        "karakteristik": "Daging unggas mentah, mudah rusak",
-        "bahaya": [
-            {
-                "kategori": "Biologi",
-                "bahaya": "Salmonella spp. dan Campylobacter spp.",
-                "sumber": "Daging ayam mentah",
-                "keparahan": 3,
-                "kemungkinan": 3,
-                "pengendalian": "Rantai dingin, pencegahan kontaminasi silang, pemasakan tervalidasi"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Tulang atau serpihan tulang",
-                "sumber": "Daging ayam",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Pemeriksaan bahan dan proses"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan chiller/freezer",
-            "Persiapan",
-            "Pemotongan",
-            "Pencucian sesuai SOP",
-            "Pemasakan",
-            "Holding",
-            "Pemorsian",
-            "Distribusi"
-        ]
-    },
-
-    "telur": {
-        "nama": "Telur",
-        "nama_produk": "Olahan Telur Matang",
-        "nama_inggris": "Egg",
-        "kategori": "Telur",
-        "alergen": "MENGANDUNG ALERGEN TELUR",
-        "penyimpanan": "Sesuai spesifikasi penerimaan dan SOP penyimpanan",
-        "karakteristik": "Telur mentah, mudah rusak",
-        "bahaya": [
-            {
-                "kategori": "Biologi",
-                "bahaya": "Salmonella spp.",
-                "sumber": "Telur mentah dan cangkang",
-                "keparahan": 3,
-                "kemungkinan": 3,
-                "pengendalian": "Penerimaan baik, pencegahan kontaminasi silang, pemasakan tervalidasi"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Serpihan cangkang",
-                "sumber": "Pemecahan telur",
-                "keparahan": 2,
-                "kemungkinan": 2,
-                "pengendalian": "Pemeriksaan telur dan pemecahan higienis"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan",
-            "Persiapan",
-            "Pemecahan",
-            "Pengolahan",
-            "Pemasakan",
-            "Holding",
-            "Pemorsian",
-            "Distribusi"
-        ]
-    },
-
-    "udang": {
-        "nama": "Udang",
-        "nama_produk": "Olahan Udang Matang",
-        "nama_inggris": "Shrimp",
-        "kategori": "Seafood",
-        "alergen": "MENGANDUNG ALERGEN KRUSTASEA",
-        "penyimpanan": "Chiller/freezer sesuai spesifikasi",
-        "karakteristik": "Seafood mentah, mudah rusak",
-        "bahaya": [
-            {
-                "kategori": "Biologi",
-                "bahaya": "Mikroorganisme patogen dari seafood",
-                "sumber": "Udang mentah",
-                "keparahan": 3,
-                "kemungkinan": 3,
-                "pengendalian": "Rantai dingin, pemasok disetujui, pemasakan tervalidasi"
-            },
-            {
-                "kategori": "Kimia",
-                "bahaya": "Residu bahan kimia yang tidak sesuai",
-                "sumber": "Bahan baku dan proses",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Spesifikasi pemasok dan pemeriksaan"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Sisa cangkang atau benda asing",
-                "sumber": "Pengupasan dan bahan baku",
-                "keparahan": 2,
-                "kemungkinan": 3,
-                "pengendalian": "Pemeriksaan dan pengupasan sesuai SOP"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan dingin",
-            "Pengupasan",
-            "Pencucian",
-            "Penimbangan",
-            "Pemasakan",
-            "Holding",
-            "Pemorsian",
-            "Distribusi"
-        ]
-    },
-
-    "sapi": {
-        "nama": "Daging Sapi",
-        "nama_produk": "Olahan Daging Sapi Matang",
-        "nama_inggris": "Beef",
-        "kategori": "Daging",
-        "alergen": "Tidak termasuk alergen utama apabila tidak ada bahan tambahan alergen",
-        "penyimpanan": "Chiller/freezer sesuai spesifikasi",
-        "karakteristik": "Daging mentah, mudah rusak",
-        "bahaya": [
-            {
-                "kategori": "Biologi",
-                "bahaya": "E. coli patogen dan Salmonella spp.",
-                "sumber": "Daging sapi mentah",
-                "keparahan": 3,
-                "kemungkinan": 3,
-                "pengendalian": "Rantai dingin, pencegahan kontaminasi silang, pemasakan tervalidasi"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Tulang atau benda asing",
-                "sumber": "Bahan baku",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Pemeriksaan bahan dan proses"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan dingin",
-            "Persiapan",
-            "Pemotongan",
-            "Pemasakan",
-            "Holding",
-            "Pemorsian",
-            "Distribusi"
-        ]
-    },
-
-    "beras": {
-        "nama": "Beras",
-        "nama_produk": "Nasi Putih Matang",
-        "nama_inggris": "Rice",
-        "kategori": "Serealia",
-        "alergen": "Tidak termasuk alergen utama yang umum diakui Codex",
-        "penyimpanan": "Gudang kering bersih dan sesuai SOP",
-        "karakteristik": "Bahan kering yang diolah dengan air dan panas",
-        "bahaya": [
-            {
-                "kategori": "Biologi",
-                "bahaya": "Bacillus cereus dan spora",
-                "sumber": "Bahan baku dan penyimpanan nasi matang",
-                "keparahan": 3,
-                "kemungkinan": 3,
-                "pengendalian": "Pemasok baik, penyimpanan kering, pemasakan, kontrol waktu-suhu"
-            },
-            {
-                "kategori": "Kimia",
-                "bahaya": "Kontaminan kimia sesuai risiko bahan",
-                "sumber": "Bahan baku",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Pemasok disetujui dan spesifikasi bahan"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Batu, sekam, benda asing",
-                "sumber": "Bahan baku",
-                "keparahan": 2,
-                "kemungkinan": 3,
-                "pengendalian": "Sortasi dan pemeriksaan bahan"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan gudang kering",
-            "Sortasi",
-            "Pencucian",
-            "Penimbangan",
-            "Pemasakan",
-            "Holding",
-            "Pemorsian",
-            "Distribusi"
-        ]
-    },
-
-    "kentang": {
-        "nama": "Kentang",
-        "nama_produk": "Olahan Kentang Matang",
-        "nama_inggris": "Potato",
-        "kategori": "Umbi",
-        "alergen": "Tidak termasuk alergen utama yang umum diakui Codex",
-        "penyimpanan": "Sesuai spesifikasi bahan",
-        "karakteristik": "Umbi segar",
-        "bahaya": [
-            {
-                "kategori": "Biologi",
-                "bahaya": "Mikroorganisme dari tanah dan air",
-                "sumber": "Bahan baku",
-                "keparahan": 3,
-                "kemungkinan": 3,
-                "pengendalian": "Sortasi, pencucian, pemasakan"
-            },
-            {
-                "kategori": "Kimia",
-                "bahaya": "Glikoalkaloid pada kentang yang rusak atau menghijau",
-                "sumber": "Bahan baku",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Tolak kentang hijau, busuk, atau tidak sesuai"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Tanah dan benda asing",
-                "sumber": "Bahan baku",
-                "keparahan": 2,
-                "kemungkinan": 3,
-                "pengendalian": "Sortasi dan pencucian"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan",
-            "Sortasi",
-            "Pencucian",
-            "Pengupasan",
-            "Pemotongan",
-            "Pemasakan",
-            "Holding",
-            "Pemorsian",
-            "Distribusi"
-        ]
-    },
-
-    "tempe": {
-        "nama": "Tempe",
-        "nama_produk": "Olahan Tempe Matang",
-        "nama_inggris": "Tempeh",
-        "kategori": "Nabati",
-        "alergen": "MENGANDUNG KEDELAI",
-        "penyimpanan": "Sesuai spesifikasi bahan dan SOP",
-        "karakteristik": "Produk kedelai fermentasi",
-        "bahaya": [
-            {
-                "kategori": "Biologi",
-                "bahaya": "Mikroorganisme patogen akibat kontaminasi bahan atau proses",
-                "sumber": "Bahan baku, air, pekerja, alat",
-                "keparahan": 3,
-                "kemungkinan": 3,
-                "pengendalian": "Pemasok disetujui, higiene, pemasakan"
-            },
-            {
-                "kategori": "Kimia",
-                "bahaya": "Kontaminan kimia sesuai risiko bahan",
-                "sumber": "Bahan baku",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Spesifikasi pemasok"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Benda asing",
-                "sumber": "Bahan baku dan proses",
-                "keparahan": 2,
-                "kemungkinan": 2,
-                "pengendalian": "Pemeriksaan bahan dan alat"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan",
-            "Persiapan",
-            "Pemotongan",
-            "Pemasakan",
-            "Holding",
-            "Pemorsian",
-            "Distribusi"
-        ]
-    },
-
-    "tahu": {
-        "nama": "Tahu",
-        "nama_produk": "Olahan Tahu Matang",
-        "nama_inggris": "Tofu",
-        "kategori": "Nabati",
-        "alergen": "MENGANDUNG KEDELAI",
-        "penyimpanan": "Sesuai spesifikasi bahan dan SOP",
-        "karakteristik": "Produk kedelai dengan kadar air tinggi",
-        "bahaya": [
-            {
-                "kategori": "Biologi",
-                "bahaya": "Mikroorganisme patogen akibat kontaminasi bahan atau proses",
-                "sumber": "Bahan baku, air, pekerja, alat",
-                "keparahan": 3,
-                "kemungkinan": 3,
-                "pengendalian": "Pemasok disetujui, higiene, pemasakan"
-            },
-            {
-                "kategori": "Kimia",
-                "bahaya": "Kontaminan kimia dari bahan atau proses",
-                "sumber": "Bahan baku",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Spesifikasi pemasok dan pemeriksaan"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Benda asing",
-                "sumber": "Bahan baku dan proses",
-                "keparahan": 2,
-                "kemungkinan": 2,
-                "pengendalian": "Pemeriksaan bahan dan alat"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan",
-            "Persiapan",
-            "Pemotongan",
-            "Pemasakan",
-            "Holding",
-            "Pemorsian",
-            "Distribusi"
-        ]
-    },
-
-    "apel": {
-        "nama": "Apel",
-        "nama_produk": "Apel Potong / Buah Segar",
-        "nama_inggris": "Apple",
-        "kategori": "Buah",
-        "alergen": "Tidak termasuk alergen utama yang umum diakui Codex",
-        "penyimpanan": "Sesuai spesifikasi dan pengendalian suhu",
-        "karakteristik": "Buah segar siap santap",
-        "bahaya": [
-            {
-                "kategori": "Biologi",
-                "bahaya": "Mikroorganisme patogen pada permukaan buah",
-                "sumber": "Tanah, air, pekerja, alat",
-                "keparahan": 3,
-                "kemungkinan": 3,
-                "pengendalian": "Pemasok disetujui, pencucian, higiene, kontrol suhu/waktu"
-            },
-            {
-                "kategori": "Kimia",
-                "bahaya": "Residu pestisida",
-                "sumber": "Budidaya",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Pemasok disetujui dan pemeriksaan"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Biji, tangkai, benda asing",
-                "sumber": "Bahan baku",
-                "keparahan": 2,
-                "kemungkinan": 2,
-                "pengendalian": "Sortasi dan pemeriksaan"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan",
-            "Sortasi",
-            "Pencucian",
-            "Pemotongan bila diperlukan",
-            "Pemorsian",
-            "Distribusi"
-        ]
-    },
-
-    "semangka": {
-        "nama": "Semangka",
-        "nama_produk": "Semangka Potong / Buah Segar",
-        "nama_inggris": "Watermelon",
-        "kategori": "Buah",
-        "alergen": "Tidak termasuk alergen utama yang umum diakui Codex",
-        "penyimpanan": "Sesuai spesifikasi dan pengendalian suhu",
-        "karakteristik": "Buah segar siap santap",
-        "bahaya": [
-            {
-                "kategori": "Biologi",
-                "bahaya": "Mikroorganisme patogen pada permukaan dan daging buah",
-                "sumber": "Tanah, air, pekerja, alat",
-                "keparahan": 3,
-                "kemungkinan": 3,
-                "pengendalian": "Pemasok disetujui, pencucian, higiene, kontrol suhu/waktu"
-            },
-            {
-                "kategori": "Kimia",
-                "bahaya": "Residu pestisida",
-                "sumber": "Budidaya",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Pemasok disetujui dan pemeriksaan"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Biji, kulit, dan benda asing",
-                "sumber": "Bahan baku",
-                "keparahan": 2,
-                "kemungkinan": 2,
-                "pengendalian": "Sortasi dan pemeriksaan"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan",
-            "Sortasi",
-            "Pencucian",
-            "Pemotongan",
-            "Pemorsian",
-            "Distribusi"
-        ]
-    },
-
-    "minyak": {
-        "nama": "Minyak Goreng",
-        "nama_produk": "Minyak Goreng",
-        "nama_inggris": "Cooking oil",
-        "kategori": "Bahan Tambahan",
-        "alergen": "Periksa jenis minyak dan spesifikasi pemasok",
-        "penyimpanan": "Gudang kering, tertutup, sesuai spesifikasi",
-        "karakteristik": "Bahan cair untuk pengolahan makanan",
-        "bahaya": [
-            {
-                "kategori": "Kimia",
-                "bahaya": "Kontaminan kimia atau minyak rusak",
-                "sumber": "Bahan baku dan penggunaan",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Pemasok disetujui, spesifikasi, kontrol penggunaan minyak"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Benda asing",
-                "sumber": "Kemasan dan proses",
-                "keparahan": 2,
-                "kemungkinan": 2,
-                "pengendalian": "Pemeriksaan kemasan dan penyaringan sesuai SOP"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan",
-            "Penimbangan",
-            "Pengolahan",
-            "Pemorsian"
-        ]
-    },
-
-    "bumbu": {
-        "nama": "Bumbu Dapur",
-        "nama_produk": "Bumbu Masakan",
-        "nama_inggris": "Cooking spices",
-        "kategori": "Bumbu",
-        "alergen": "Periksa komposisi dan label pemasok",
-        "penyimpanan": "Gudang kering sesuai spesifikasi",
-        "karakteristik": "Bahan tambahan untuk pengolahan makanan",
-        "bahaya": [
-            {
-                "kategori": "Biologi",
-                "bahaya": "Kontaminasi mikroba pada bahan bumbu",
-                "sumber": "Bahan baku dan penyimpanan",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Pemasok disetujui, penyimpanan baik, pengolahan higienis"
-            },
-            {
-                "kategori": "Kimia",
-                "bahaya": "Kontaminan kimia atau bahan tambahan tidak sesuai",
-                "sumber": "Bahan baku",
-                "keparahan": 3,
-                "kemungkinan": 2,
-                "pengendalian": "Spesifikasi pemasok dan pemeriksaan label"
-            },
-            {
-                "kategori": "Fisik",
-                "bahaya": "Benda asing",
-                "sumber": "Bahan baku dan kemasan",
-                "keparahan": 2,
-                "kemungkinan": 2,
-                "pengendalian": "Pemeriksaan bahan dan kemasan"
-            }
-        ],
-        "proses": [
-            "Penerimaan",
-            "Penyimpanan",
-            "Penimbangan",
-            "Pengolahan",
-            "Pemasakan"
-        ]
-    }
-}
-
-# =========================================================
-# FUNGSI DETEKSI BAHAN
-# =========================================================
-
-def deteksi_bahan(nama_menu):
-
-    m = nama_menu.lower().strip()
-
-    prioritas = [
-        ("udang", ["udang", "shrimp"]),
-        ("telur", ["telur", "egg"]),
-        ("ayam", ["ayam", "chicken"]),
-        ("sapi", ["sapi", "daging sapi", "beef"]),
-        ("kangkung", ["kangkung"]),
-        ("bayam", ["bayam", "spinach"]),
-        ("wortel", ["wortel", "carrot"]),
-        ("kentang", ["kentang", "potato"]),
-        ("semangka", ["semangka", "watermelon"]),
-        ("apel", ["apel", "apple"]),
-        ("beras", ["beras", "nasi", "rice"]),
-        ("tempe", ["tempe", "tempeh"]),
-        ("tahu", ["tahu", "tofu"]),
-        ("minyak", ["minyak goreng", "cooking oil"]),
-        ("bumbu", ["bumbu", "spices"])
-    ]
-
-    for bahan, kata_kunci in prioritas:
-        if any(k in m for k in kata_kunci):
-            return bahan
-
-    return "bayam"
+def clean_filename(text):
+    """
+    Mengubah nama bahan menjadi nama file yang aman.
+    """
+    text = str(text).strip().lower()
+    text = re.sub(r"[^a-z0-9]+", "_", text)
+    return text.strip("_")
 
 
-def cari_semua_bahan(teks):
-
-    m = teks.lower()
-
-    hasil = []
-
-    for bahan, info in BAHAN_DB.items():
-
-        kata = [
-            bahan,
-            info["nama"].lower(),
-            info["nama_inggris"].lower()
-        ]
-
-        if any(k in m for k in kata):
-            hasil.append(bahan)
-
-    return list(dict.fromkeys(hasil))
-
-
-# =========================================================
-# GAMBAR OTOMATIS WIKIMEDIA
-# =========================================================
-
-@st.cache_data(ttl=86400)
-def get_wikimedia_image(query):
-
-    url = (
-        "https://en.wikipedia.org/api/rest_v1/page/summary/"
-        + quote(query.replace(" ", "_"))
-    )
+def get_openai_client():
+    """
+    Mengambil API Key dari Streamlit Secrets atau input pengguna.
+    """
+    api_key = None
 
     try:
+        api_key = st.secrets["OPENAI_API_KEY"]
+    except Exception:
+        api_key = None
+
+    if not api_key:
+        api_key = st.session_state.get("api_key")
+
+    if not api_key:
+        return None
+
+    return OpenAI(api_key=api_key)
+
+
+# =========================================================
+# PENCARIAN WIKIPEDIA INDONESIA
+# =========================================================
+
+def search_wikipedia_image(ingredient):
+    """
+    Mencari gambar dan ringkasan bahan melalui Wikipedia Bahasa Indonesia.
+    Menggunakan REST API Wikipedia.
+    """
+
+    try:
+        title = quote(ingredient.replace(" ", "_"))
+
+        url = (
+            "https://id.wikipedia.org/api/rest_v1/page/summary/"
+            + title
+        )
 
         response = requests.get(
             url,
-            timeout=10,
+            timeout=15,
             headers={
-                "User-Agent": "HACCP-Generator/2.0"
+                "User-Agent": "HACCP-SPPG-Generator/1.0"
             }
         )
 
-        if response.status_code == 200:
+        if response.status_code != 200:
+            return {
+                "title": ingredient,
+                "description": "",
+                "image": None,
+                "wikipedia_url": (
+                    "https://id.wikipedia.org/wiki/"
+                    + title
+                )
+            }
 
-            data = response.json()
+        data = response.json()
 
-            if "thumbnail" in data:
-                return data["thumbnail"]["source"]
+        image_url = None
 
-    except Exception:
-        return None
+        if data.get("thumbnail"):
+            image_url = data["thumbnail"].get("source")
 
-    return None
-
-
-# =========================================================
-# DATA UMUM HACCP
-# =========================================================
-
-def generate_tim_haccp(penanggung_jawab):
-
-    return pd.DataFrame([
-        {
-            "Peran": "Ketua Tim HACCP",
-            "Nama / Jabatan": penanggung_jawab,
-            "Tanggung Jawab": "Koordinasi, validasi, verifikasi, persetujuan dokumen"
-        },
-        {
-            "Peran": "Ahli Gizi",
-            "Nama / Jabatan": "Tim HACCP",
-            "Tanggung Jawab": "Spesifikasi bahan, menu, analisis bahaya, validasi gizi"
-        },
-        {
-            "Peran": "Kepala Produksi",
-            "Nama / Jabatan": "Tim Produksi",
-            "Tanggung Jawab": "Pengawasan proses, suhu, waktu, higiene"
-        },
-        {
-            "Peran": "Petugas Penerimaan",
-            "Nama / Jabatan": "Tim Logistik",
-            "Tanggung Jawab": "Pemeriksaan bahan, kondisi fisik, suhu, pemasok"
-        },
-        {
-            "Peran": "Petugas Sanitasi",
-            "Nama / Jabatan": "Tim Sanitasi",
-            "Tanggung Jawab": "Sanitasi ruangan, alat, higiene personal"
-        },
-        {
-            "Peran": "Petugas Pemorsian",
-            "Nama / Jabatan": "Tim Pemorsian",
-            "Tanggung Jawab": "Kontrol higiene, pemorsian, waktu, suhu"
-        },
-        {
-            "Peran": "Petugas Distribusi",
-            "Nama / Jabatan": "Tim Distribusi",
-            "Tanggung Jawab": "Kontrol waktu, suhu, dan penyerahan makanan"
+        return {
+            "title": data.get("title", ingredient),
+            "description": data.get("extract", ""),
+            "image": image_url,
+            "wikipedia_url": data.get(
+                "content_urls",
+                {}
+            ).get(
+                "desktop",
+                {}
+            ).get(
+                "page",
+                "https://id.wikipedia.org/wiki/" + title
+            )
         }
-    ])
 
-
-def generate_deskripsi_produk(nama_menu, info, jumlah_porsi):
-
-    return pd.DataFrame([
-        ["Nama Produk", info["nama_produk"]],
-        ["Bahan / Menu", nama_menu],
-        ["Kategori", info["kategori"]],
-        ["Bahan Utama", info["nama"]],
-        ["Jumlah Produksi", jumlah_porsi],
-        ["Tujuan Penggunaan", "Siap santap setelah pengolahan"],
-        ["Konsumen Sasaran", "Penerima manfaat MBG sesuai kelompok usia"],
-        ["Kelompok Rentan", "Balita, anak-anak, lansia, ibu hamil, dan individu rentan sesuai konteks"],
-        ["Alergen", info["alergen"]],
-        ["Karakteristik", info["karakteristik"]],
-        ["Penyimpanan", info["penyimpanan"]],
-        ["Kemasan", "Ompreng food grade / sesuai SOP distribusi"],
-        ["Masa Simpan", "Mengikuti validasi waktu-suhu dan persyaratan distribusi"],
-        ["Metode Pengolahan", "Sesuai diagram alir proses"],
-        ["Status Dokumen", "Rancangan — wajib divalidasi Tim HACCP"]
-    ], columns=["Parameter", "Keterangan"])
-
-
-# =========================================================
-# DIAGRAM ALIR
-# =========================================================
-
-def generate_diagram_alir(info, nama_menu):
-
-    proses = info["proses"]
-
-    return " → ".join(proses)
-
-
-def generate_tahap_proses(info):
-
-    return pd.DataFrame([
-        {
-            "No": i + 1,
-            "Tahap Proses": tahap,
-            "Keterangan": "Sesuai SOP dan observasi proses aktual"
+    except Exception as error:
+        return {
+            "title": ingredient,
+            "description": "",
+            "image": None,
+            "wikipedia_url": (
+                "https://id.wikipedia.org/wiki/"
+                + quote(ingredient.replace(" ", "_"))
+            ),
+            "error": str(error)
         }
-        for i, tahap in enumerate(info["proses"])
-    ])
 
 
 # =========================================================
-# ANALISIS BAHAYA
+# PROMPT AI HACCP
 # =========================================================
 
-def generate_analisis_bahaya(info, nama_menu):
+def build_haccp_prompt(
+    ingredient,
+    facility,
+    responsible_person,
+    intended_use,
+    process_description,
+    vulnerable_groups,
+    wikipedia_description
+):
+    """
+    Membuat instruksi detail kepada AI.
+    """
 
-    rows = []
+    return f"""
+Anda adalah konsultan HACCP dan keamanan pangan yang memahami:
 
-    for tahap in info["proses"]:
+- Codex Alimentarius HACCP;
+- 5 tugas pendahuluan HACCP;
+- 7 prinsip HACCP;
+- Good Hygiene Practices/GHP;
+- Good Manufacturing Practices/GMP;
+- pendekatan PRP, OPRP dan CCP;
+- proses produksi makanan skala besar;
+- kondisi operasional dapur MBG/SPPG di Indonesia.
 
-        for h in info["bahaya"]:
+Buatkan DOKUMEN HACCP PER BAHAN secara rinci, jelas, praktis dan mudah diterapkan.
 
-            rows.append({
-                "Nama Menu": nama_menu,
-                "Tahap Proses": tahap,
-                "Kategori Bahaya": h["kategori"],
-                "Bahaya Potensial": h["bahaya"],
-                "Sumber Bahaya": h["sumber"],
-                "Keparahan": h["keparahan"],
-                "Kemungkinan": h["kemungkinan"],
-                "Skor Risiko": h["keparahan"] * h["kemungkinan"],
-                "Tindakan Pengendalian": h["pengendalian"],
-                "Bahaya Signifikan": "Evaluasi Tim HACCP",
-                "CCP": "Evaluasi Pohon Keputusan"
-            })
+DATA INPUT:
 
-    return pd.DataFrame(rows)
+Nama bahan:
+{ingredient}
 
+Nama dapur/SPPG:
+{facility}
 
-# =========================================================
-# DATA CCP
-# =========================================================
+Penanggung jawab:
+{responsible_person}
 
-def generate_ccp(info, nama_menu):
+Tujuan penggunaan:
+{intended_use}
 
-    rows = []
+Kelompok penerima manfaat:
+{vulnerable_groups}
 
-    for tahap in info["proses"]:
+Gambaran proses:
+{process_description}
 
-        if "Pemasakan" in tahap or "Pengolahan" in tahap:
+Informasi tambahan dari Wikipedia:
+{wikipedia_description}
 
-            rows.append({
-                "Tahap Proses": tahap,
-                "Bahaya Signifikan": "Bahaya biologis — evaluasi spesifik produk",
-                "CCP": "Evaluasi pohon keputusan",
-                "Batas Kritis": "Tetapkan berdasarkan validasi proses",
-                "Monitoring": "Suhu inti / waktu sesuai SOP tervalidasi",
-                "Frekuensi": "Setiap batch / sesuai SOP",
-                "PIC": "Kepala Produksi",
-                "Tindakan Koreksi": "Tahan produk dan lanjutkan tindakan sesuai SOP",
-                "Verifikasi": "Review catatan dan validasi proses"
-            })
+PENTING:
 
-        elif "Holding" in tahap:
+1. Jangan mengarang seolah-olah semua batas kritis sudah resmi.
+2. Bedakan antara:
+   - batas kritis yang harus divalidasi;
+   - target operasional;
+   - rekomendasi pengendalian;
+   - persyaratan yang harus mengikuti peraturan Indonesia.
+3. Jangan langsung menyatakan semua tahapan sebagai CCP.
+4. Gunakan pendekatan decision tree untuk menentukan:
+   - PRP;
+   - OPRP;
+   - CCP kandidat.
+5. Jika data suhu, pH, Aw, waktu, atau ukuran bahan tidak tersedia, tulis:
+   "Harus diverifikasi/diukur di lapangan".
+6. Jangan menetapkan nilai pH atau Aw tanpa data pengukuran.
+7. Jelaskan bahaya biologis, kimia, fisik dan alergen.
+8. Sesuaikan analisis dengan jenis bahan.
+9. Jelaskan risiko untuk:
+   - anak sekolah;
+   - balita;
+   - ibu hamil/menyusui;
+   - kelompok rentan lainnya jika relevan.
+10. Gunakan bahasa Indonesia yang mudah dipahami oleh tim dapur.
 
-            rows.append({
-                "Tahap Proses": tahap,
-                "Bahaya Signifikan": "Pertumbuhan mikroba dan rekontaminasi",
-                "CCP": "Evaluasi pohon keputusan",
-                "Batas Kritis": "Tetapkan batas waktu-suhu tervalidasi",
-                "Monitoring": "Suhu dan waktu holding",
-                "Frekuensi": "Berkala sesuai SOP",
-                "PIC": "Kepala Produksi / Pemorsian",
-                "Tindakan Koreksi": "Tahan produk, evaluasi waktu-suhu, tindak lanjuti SOP",
-                "Verifikasi": "Review log suhu dan waktu"
-            })
+HASIL WAJIB DALAM FORMAT JSON VALID DENGAN STRUKTUR BERIKUT:
 
-    return pd.DataFrame(rows)
+{{
+  "identitas_bahan": {{
+    "nama_bahan": "",
+    "nama_lain": "",
+    "kategori_bahan": "",
+    "deskripsi": "",
+    "asal_sumber": "",
+    "karakteristik_penting": "",
+    "potensi_alergen": "",
+    "kelompok_rentan": "",
+    "tujuan_penggunaan": ""
+  }},
 
+  "tugas_pendahuluan": {{
+    "tim_haccp": [],
+    "deskripsi_produk": "",
+    "penggunaan_yang_dimaksud": "",
+    "diagram_alir": [],
+    "verifikasi_diagram_alir": []
+  }},
 
-# =========================================================
-# POHON KEPUTUSAN CCP
-# =========================================================
+  "analisis_bahaya": [
+    {{
+      "tahap": "",
+      "bahaya_biologis": "",
+      "bahaya_kimia": "",
+      "bahaya_fisik": "",
+      "bahaya_alergen": "",
+      "penyebab": "",
+      "tingkat_risiko": "",
+      "tindakan_pengendalian": "",
+      "kategori_pengendalian": "PRP/OPRP/CCP kandidat",
+      "alasan": ""
+    }}
+  ],
 
-def pohon_keputusan_ccp():
+  "penerimaan_bahan": {{
+    "kondisi_kemasan": "",
+    "kondisi_kendaraan": "",
+    "kondisi_sensoris": "",
+    "suhu_penerimaan": "",
+    "dokumen_pemasok": "",
+    "kriteria_ditolak": "",
+    "tindakan_jika_tidak_sesuai": ""
+  }},
 
-    st.subheader("🌳 Pohon Keputusan CCP")
+  "penyimpanan": {{
+    "jenis_penyimpanan": "",
+    "suhu_target": "",
+    "batas_waktu": "",
+    "pemisahan_bahan": "",
+    "fifo_fefo": "",
+    "risiko_kontaminasi_silang": "",
+    "monitoring": ""
+  }},
 
-    st.warning(
-        "Hasil ini adalah alat bantu evaluasi. "
-        "Penetapan CCP harus disetujui Tim HACCP."
-    )
+  "persiapan_bahan": {{
+    "sortasi": "",
+    "pencucian": "",
+    "sanitasi": "",
+    "pemotongan": "",
+    "alat_dan_apd": "",
+    "pencegahan_kontaminasi_silang": ""
+  }},
 
-    q1 = st.radio(
-        "1. Apakah terdapat bahaya signifikan?",
-        ["Ya", "Tidak"],
-        key="ccp_q1"
-    )
+  "proses_pengolahan": {{
+    "metode": "",
+    "parameter_penting": "",
+    "suhu_inti": "",
+    "waktu_proses": "",
+    "indikator_kematangan": "",
+    "risiko_jika_tidak_sesuai": "",
+    "tindakan_koreksi": ""
+  }},
 
-    if q1 == "Tidak":
-        return "Bukan CCP — bahaya tidak signifikan"
+  "penentuan_ccp": [
+    {{
+      "tahap": "",
+      "pertanyaan_decision_tree": "",
+      "hasil": "",
+      "status": "PRP/OPRP/CCP kandidat",
+      "alasan": "",
+      "validasi_yang_diperlukan": ""
+    }}
+  ],
 
-    q2 = st.radio(
-        "2. Apakah tersedia tindakan pengendalian?",
-        ["Ya", "Tidak"],
-        key="ccp_q2"
-    )
+  "rencana_ccp": [
+    {{
+      "nomor_ccp": "",
+      "tahap": "",
+      "bahaya_signifikan": "",
+      "batas_kritis": "",
+      "dasar_penentuan": "",
+      "cara_monitoring": "",
+      "frekuensi": "",
+      "penanggung_jawab": "",
+      "tindakan_koreksi": "",
+      "verifikasi": "",
+      "rekaman": ""
+    }}
+  ],
 
-    if q2 == "Tidak":
-        return "Evaluasi perubahan proses atau tindakan pengendalian"
+  "monitoring_dan_verifikasi": [
+    {{
+      "parameter": "",
+      "metode_pemeriksaan": "",
+      "frekuensi": "",
+      "penanggung_jawab": "",
+      "formulir_rekaman": "",
+      "verifikasi": ""
+    }}
+  ],
 
-    q3 = st.radio(
-        "3. Apakah tahap ini dirancang untuk menghilangkan "
-        "atau mengurangi bahaya ke tingkat dapat diterima?",
-        ["Ya", "Tidak"],
-        key="ccp_q3"
-    )
+  "tindakan_koreksi_umum": [
+    {{
+      "ketidaksesuaian": "",
+      "tindakan_langsung": "",
+      "penanganan_produk": "",
+      "pencegahan_berulang": ""
+    }}
+  ],
 
-    if q3 == "Ya":
-        return "Berpotensi CCP — validasi batas kritis diperlukan"
+  "dokumen_rekaman": [
+    "",
+    "",
+    ""
+  ],
 
-    q4 = st.radio(
-        "4. Apakah bahaya dapat meningkat ke tingkat tidak dapat diterima?",
-        ["Ya", "Tidak"],
-        key="ccp_q4"
-    )
+  "catatan_validasi": [
+    "",
+    "",
+    ""
+  ],
 
-    if q4 == "Tidak":
-        return "Bukan CCP — evaluasi pengendalian lain"
+  "kesimpulan": ""
+}}
 
-    q5 = st.radio(
-        "5. Apakah tahap berikutnya dapat menghilangkan "
-        "atau mengurangi bahaya ke tingkat dapat diterima?",
-        ["Ya", "Tidak"],
-        key="ccp_q5"
-    )
+Hanya kembalikan JSON valid tanpa markdown dan tanpa penjelasan tambahan.
+"""
 
-    if q5 == "Ya":
-        return "Bukan CCP pada tahap ini — dikendalikan tahap berikutnya"
-
-    return "CCP — tetapkan batas kritis, monitoring, koreksi, dan verifikasi"
-
-
-# =========================================================
-# FORM MONITORING
-# =========================================================
-
-def generate_form_monitoring():
-
-    return pd.DataFrame([
-        {
-            "Tanggal": "",
-            "Nama Menu": "",
-            "Tahap Proses": "",
-            "Jam": "",
-            "Suhu (°C)": "",
-            "Batas Kritis": "",
-            "Hasil": "Sesuai / Tidak Sesuai",
-            "PIC": "",
-            "Paraf": ""
-        }
-        for _ in range(10)
-    ])
-
-
-def generate_form_koreksi():
-
-    return pd.DataFrame([
-        {
-            "Tanggal": "",
-            "Nama Menu": "",
-            "Tahap Proses": "",
-            "Penyimpangan": "",
-            "Tindakan Koreksi": "",
-            "Produk Ditahan / Dilepas": "",
-            "PIC": "",
-            "Verifikasi": "",
-            "Paraf": ""
-        }
-        for _ in range(10)
-    ])
-
-
-# =========================================================
-# INPUT SIDEBAR
-# =========================================================
-
-st.sidebar.header("⚙️ Pengaturan Operasional")
-
-nama_menu = st.sidebar.text_input(
-    "Nama Bahan / Menu",
-    value="Bayam"
-)
-
-nama_dapur = st.sidebar.text_input(
-    "Nama Fasilitas / Dapur",
-    value="Dapur Satuan Pelayanan MBG"
-)
-
-penanggung_jawab = st.sidebar.text_input(
-    "Penanggung Jawab / Ketua Tim",
-    value="Ishak Yunus"
-)
-
-jumlah_porsi = st.sidebar.number_input(
-    "Jumlah Porsi",
-    min_value=1,
-    value=1000,
-    step=100
-)
-
-# Input bahan tambahan
-bahan_tambahan = st.sidebar.text_input(
-    "Bahan Tambahan / Bumbu",
-    value=""
-)
-
-# Pilih bahan dari database
-bahan = deteksi_bahan(nama_menu)
-
-info_bahan = BAHAN_DB[bahan]
-
-# Semua bahan yang terdeteksi
-semua_bahan = cari_semua_bahan(
-    nama_menu + " " + bahan_tambahan
-)
-
-if bahan not in semua_bahan:
-    semua_bahan.insert(0, bahan)
-
-semua_bahan = list(dict.fromkeys(semua_bahan))
-
-# =========================================================
-# GENERATE DATA
-# =========================================================
-
-df_tim = generate_tim_haccp(penanggung_jawab)
-
-df_deskripsi = generate_deskripsi_produk(
-    nama_menu,
-    info_bahan,
-    jumlah_porsi
-)
-
-diagram_alir = generate_diagram_alir(
-    info_bahan,
-    nama_menu
-)
-
-df_tahap = generate_tahap_proses(info_bahan)
-
-df_bahaya = generate_analisis_bahaya(
-    info_bahan,
-    nama_menu
-)
-
-df_ccp = generate_ccp(
-    info_bahan,
-    nama_menu
-)
-
-df_monitoring = generate_form_monitoring()
-
-df_koreksi = generate_form_koreksi()
 
 # =========================================================
-# HEADER
+# PEMANGGILAN AI
 # =========================================================
 
-st.header(f"📋 Rencana HACCP: {nama_menu}")
+def generate_haccp_with_ai(
+    ingredient,
+    facility,
+    responsible_person,
+    intended_use,
+    process_description,
+    vulnerable_groups,
+    wikipedia_description
+):
+    """
+    Mengirim prompt ke AI dan membaca hasil JSON.
+    """
 
-st.subheader(
-    f"Fasilitas: {nama_dapur} | PJ: {penanggung_jawab}"
-)
+    client = get_openai_client()
 
-col1, col2 = st.columns([1, 2])
-
-with col1:
-
-    gambar = get_wikimedia_image(
-        info_bahan["nama_inggris"]
-    )
-
-    if gambar:
-        st.image(
-            gambar,
-            caption=info_bahan["nama_produk"],
-            use_container_width=True
+    if client is None:
+        raise ValueError(
+            "OPENAI_API_KEY belum dimasukkan."
         )
-    else:
-        st.info("Gambar otomatis belum tersedia.")
 
-with col2:
-
-    st.markdown(f"### {info_bahan['nama_produk']}")
-
-    st.write(
-        f"**Kategori:** {info_bahan['kategori']}"
+    prompt = build_haccp_prompt(
+        ingredient=ingredient,
+        facility=facility,
+        responsible_person=responsible_person,
+        intended_use=intended_use,
+        process_description=process_description,
+        vulnerable_groups=vulnerable_groups,
+        wikipedia_description=wikipedia_description
     )
 
-    st.write(
-        f"**Alergen:** {info_bahan['alergen']}"
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0.2,
+        response_format={
+            "type": "json_object"
+        },
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Anda adalah ahli HACCP. "
+                    "Jawab hanya dalam JSON valid."
+                )
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
     )
 
-    st.write(
-        f"**Jumlah Produksi:** {jumlah_porsi:,} porsi"
-    )
+    content = response.choices[0].message.content
 
-    st.write(
-        f"**Bahan Tambahan:** {bahan_tambahan or 'Tidak diisi'}"
-    )
+    return json.loads(content)
 
-    st.info(
-        "Dokumen ini merupakan rancangan HACCP "
-        "yang wajib divalidasi oleh Tim HACCP."
-    )
 
 # =========================================================
-# TABS
+# KONVERSI DATA JSON KE DATAFRAME
 # =========================================================
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "5 Langkah Persiapan",
-    "7 Prinsip HACCP",
-    "Pohon CCP",
-    "Monitoring",
-    "Dokumentasi",
-    "Ekspor Excel"
-])
+def list_to_dataframe(data):
+    """
+    Mengubah list dictionary menjadi DataFrame.
+    """
+    if not data:
+        return pd.DataFrame()
+
+    if isinstance(data[0], dict):
+        return pd.DataFrame(data)
+
+    return pd.DataFrame({
+        "Keterangan": data
+    })
+
+
+def flatten_simple_dict(data):
+    """
+    Mengubah dictionary sederhana menjadi tabel.
+    """
+    rows = []
+
+    for key, value in data.items():
+        if isinstance(value, list):
+            value = "\n".join(
+                [str(item) for item in value]
+            )
+
+        elif isinstance(value, dict):
+            value = json.dumps(
+                value,
+                ensure_ascii=False,
+                indent=2
+            )
+
+        rows.append({
+            "Parameter": key,
+            "Keterangan": value
+        })
+
+    return pd.DataFrame(rows)
+
 
 # =========================================================
-# TAB 1 — 5 LANGKAH PERSIAPAN
+# EXPORT EXCEL
 # =========================================================
 
-with tab1:
+def create_excel_file(haccp_data, wiki_data, metadata):
+    """
+    Membuat file Excel dengan banyak sheet.
+    """
 
-    st.subheader("I. 5 Langkah Persiapan")
-
-    st.markdown("### 1. Tim HACCP & Tanggung Jawab")
-
-    st.dataframe(
-        df_tim,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    st.markdown("### 2. Deskripsi Produk Lengkap")
-
-    st.dataframe(
-        df_deskripsi,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    st.markdown("### 3. Intended Use & Konsumen Sasaran")
-
-    st.info(
-        "Produk ditujukan untuk siap santap oleh penerima manfaat MBG "
-        "sesuai kelompok usia. Kelompok rentan perlu diperhatikan "
-        "dalam analisis bahaya dan pengendalian."
-    )
-
-    st.markdown("### 4. Diagram Alir Proses")
-
-    st.code(
-        diagram_alir,
-        language="text"
-    )
-
-    st.markdown("### 5. Verifikasi Diagram Alir")
-
-    st.write(
-        "Tim HACCP wajib mengamati alur proses secara langsung "
-        "di lapangan dan mencatat kesesuaian dengan operasional aktual."
-    )
-
-    st.checkbox(
-        "Diagram alir sudah diverifikasi di lapangan",
-        key="verifikasi_alir"
-    )
-
-    st.text_area(
-        "Catatan Verifikasi",
-        key="catatan_verifikasi"
-    )
-
-# =========================================================
-# TAB 2 — 7 PRINSIP HACCP
-# =========================================================
-
-with tab2:
-
-    st.subheader("II. 7 Prinsip HACCP")
-
-    st.markdown("### Prinsip 1 — Analisis Bahaya")
-
-    st.dataframe(
-        df_bahaya,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    st.markdown("### Prinsip 2 — Penentuan CCP")
-
-    st.dataframe(
-        df_ccp,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    st.markdown("### Prinsip 3 — Batas Kritis")
-
-    st.write(
-        "Batas kritis harus ditetapkan dan divalidasi "
-        "berdasarkan bahaya, proses, alat, waktu, suhu, "
-        "dan persyaratan yang berlaku."
-    )
-
-    st.markdown("### Prinsip 4 — Monitoring")
-
-    st.write(
-        "Monitoring dilakukan sesuai SOP pada setiap tahap "
-        "yang ditetapkan Tim HACCP."
-    )
-
-    st.markdown("### Prinsip 5 — Tindakan Koreksi")
-
-    st.write(
-        "Produk yang menyimpang harus ditahan dan dievaluasi. "
-        "Tindakan koreksi mengikuti SOP yang disetujui."
-    )
-
-    st.markdown("### Prinsip 6 — Verifikasi")
-
-    st.write(
-        "Review catatan, pemeriksaan lapangan, evaluasi alat ukur, "
-        "dan kegiatan verifikasi lain sesuai program HACCP."
-    )
-
-    st.markdown("### Prinsip 7 — Dokumentasi")
-
-    st.write(
-        "Semua monitoring, penyimpangan, koreksi, verifikasi, "
-        "dan persetujuan harus didokumentasikan."
-    )
-
-# =========================================================
-# TAB 3 — POHON KEPUTUSAN
-# =========================================================
-
-with tab3:
-
-    hasil_ccp = pohon_keputusan_ccp()
-
-    st.success(hasil_ccp)
-
-# =========================================================
-# TAB 4 — MONITORING
-# =========================================================
-
-with tab4:
-
-    st.subheader("📝 Form Monitoring")
-
-    st.dataframe(
-        df_monitoring,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    st.subheader("🛠️ Form Tindakan Koreksi")
-
-    st.dataframe(
-        df_koreksi,
-        use_container_width=True,
-        hide_index=True
-    )
-
-# =========================================================
-# TAB 5 — DOKUMENTASI
-# =========================================================
-
-with tab5:
-
-    st.subheader("📁 Dokumen Pendukung HACCP")
-
-    st.markdown("""
-    - Form Penerimaan Bahan
-    - Log Suhu Pemasakan
-    - Log Suhu Holding
-    - Form Monitoring Pemorsian
-    - Form Tindakan Koreksi
-    - Form Verifikasi
-    - Form Kalibrasi Termometer
-    - Form Sanitasi Alat dan Ruangan
-    - Form Higiene Personal
-    - Form Evaluasi Pemasok
-    """)
-
-    st.warning(
-        "Pastikan dokumen yang digunakan sudah disesuaikan "
-        "dengan SOP dan persyaratan SPPG."
-    )
-
-# =========================================================
-# TAB 6 — EKSPOR EXCEL
-# =========================================================
-
-with tab6:
-
-    st.subheader("📤 Ekspor Dokumen HACCP")
-
-    st.write(
-        "Excel berisi data tim, deskripsi produk, "
-        "diagram alir, analisis bahaya, CCP, monitoring, "
-        "dan tindakan koreksi."
-    )
-
-    buffer = io.BytesIO()
+    output = io.BytesIO()
 
     with pd.ExcelWriter(
-        buffer,
+        output,
         engine="openpyxl"
     ) as writer:
 
-        df_tim.to_excel(
+        # Sheet identitas
+        identity_rows = []
+
+        for key, value in metadata.items():
+            identity_rows.append({
+                "Parameter": key,
+                "Keterangan": value
+            })
+
+        pd.DataFrame(identity_rows).to_excel(
             writer,
-            sheet_name="01 Tim HACCP",
+            sheet_name="Identitas",
             index=False
         )
 
-        df_deskripsi.to_excel(
-            writer,
-            sheet_name="02 Deskripsi Produk",
-            index=False
-        )
-
-        df_tahap.to_excel(
-            writer,
-            sheet_name="03 Diagram Alir",
-            index=False
-        )
-
-        df_bahaya.to_excel(
-            writer,
-            sheet_name="04 Analisis Bahaya",
-            index=False
-        )
-
-        df_ccp.to_excel(
-            writer,
-            sheet_name="05 CCP",
-            index=False
-        )
-
-        df_monitoring.to_excel(
-            writer,
-            sheet_name="06 Monitoring",
-            index=False
-        )
-
-        df_koreksi.to_excel(
-            writer,
-            sheet_name="07 Tindakan Koreksi",
-            index=False
-        )
-
-        pd.DataFrame([
+        # Informasi Wikipedia
+        wiki_rows = [
             {
-                "Nama Menu": nama_menu,
-                "Bahan Terdeteksi": bahan,
-                "Nama Dapur": nama_dapur,
-                "PJ": penanggung_jawab,
-                "Jumlah Porsi": jumlah_porsi,
-                "Bahan Tambahan": bahan_tambahan,
-                "Status": "Rancangan — wajib validasi"
+                "Judul Wikipedia": wiki_data.get("title", ""),
+                "Ringkasan": wiki_data.get("description", ""),
+                "URL": wiki_data.get("wikipedia_url", "")
             }
-        ]).to_excel(
+        ]
+
+        pd.DataFrame(wiki_rows).to_excel(
             writer,
-            sheet_name="08 Identitas Dokumen",
+            sheet_name="Wikipedia",
             index=False
         )
 
-        pd.DataFrame([
-            {
-                "Nama Menu": nama_menu,
-                "Nama Bahan": info_bahan["nama"],
-                "Gambar URL": gambar or "Tidak tersedia"
-            }
-        ]).to_excel(
-            writer,
-            sheet_name="09 Gambar",
-            index=False
-        )
+        # Semua bagian HACCP
+        for section_name, section_data in haccp_data.items():
 
-        for sheet in writer.sheets.values():
+            sheet_name = section_name[:31]
 
-            for column_cells in sheet.columns:
+            if isinstance(section_data, dict):
+                df = flatten_simple_dict(
+                    section_data
+                )
 
-                max_length = 0
+            elif isinstance(section_data, list):
+                df = list_to_dataframe(
+                    section_data
+                )
 
-                column_letter = column_cells[0].column_letter
+            else:
+                df = pd.DataFrame({
+                    "Keterangan": [section_data]
+                })
 
-                for cell in column_cells:
+            if df.empty:
+                df = pd.DataFrame({
+                    "Keterangan": [
+                        "Tidak ada data"
+                    ]
+                })
 
-                    try:
-                        if cell.value is not None:
-                            max_length = max(
-                                max_length,
-                                len(str(cell.value))
-                            )
-                    except Exception:
-                        pass
-
-                sheet.column_dimensions[
-                    column_letter
-                ].width = min(max_length + 2, 60)
-
-    st.download_button(
-        label="📊 Unduh Excel HACCP",
-        data=buffer.getvalue(),
-        file_name=(
-            "HACCP_"
-            + re.sub(
-                r"[^A-Za-z0-9_-]",
-                "_",
-                nama_menu
+            df.to_excel(
+                writer,
+                sheet_name=sheet_name,
+                index=False
             )
-            + ".xlsx"
-        ),
-        mime=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
+
+    output.seek(0)
+
+    return output
+
+
+# =========================================================
+# PDF HELPER
+# =========================================================
+
+def paragraph_text(value):
+    """
+    Membersihkan teks untuk ReportLab.
+    """
+    if value is None:
+        return ""
+
+    value = str(value)
+
+    value = value.replace("&", "&amp;")
+    value = value.replace("<", "&lt;")
+    value = value.replace(">", "&gt;")
+    value = value.replace("\n", "<br/>")
+
+    return value
+
+
+def dataframe_to_pdf_table(df, styles):
+    """
+    Mengubah DataFrame menjadi tabel PDF.
+    """
+
+    if df.empty:
+        return Paragraph(
+            "Tidak ada data.",
+            styles["Normal"]
+        )
+
+    columns = list(df.columns)
+
+    table_data = [
+        [
+            Paragraph(
+                paragraph_text(column),
+                styles["TableHeader"]
+            )
+            for column in columns
+        ]
+    ]
+
+    for _, row in df.iterrows():
+        table_data.append([
+            Paragraph(
+                paragraph_text(row[column]),
+                styles["Small"]
+            )
+            for column in columns
+        ])
+
+    table = Table(
+        table_data,
+        repeatRows=1,
+        colWidths=None
+    )
+
+    table.setStyle(
+        TableStyle([
+            (
+                "BACKGROUND",
+                (0, 0),
+                (-1, 0),
+                colors.HexColor("#D9EAD3")
+            ),
+            (
+                "TEXTCOLOR",
+                (0, 0),
+                (-1, 0),
+                colors.black
+            ),
+            (
+                "GRID",
+                (0, 0),
+                (-1, -1),
+                0.4,
+                colors.grey
+            ),
+            (
+                "VALIGN",
+                (0, 0),
+                (-1, -1),
+                "TOP"
+            ),
+            (
+                "LEFTPADDING",
+                (0, 0),
+                (-1, -1),
+                4
+            ),
+            (
+                "RIGHTPADDING",
+                (0, 0),
+                (-1, -1),
+                4
+            ),
+            (
+                "TOPPADDING",
+                (0, 0),
+                (-1, -1),
+                4
+            ),
+            (
+                "BOTTOMPADDING",
+                (0, 0),
+                (-1, -1),
+                4
+            )
+        ])
+    )
+
+    return table
+
+
+def create_pdf_file(
+    haccp_data,
+    wiki_data,
+    metadata
+):
+    """
+    Membuat laporan PDF HACCP.
+    """
+
+    output = io.BytesIO()
+
+    doc = SimpleDocTemplate(
+        output,
+        pagesize=landscape(A4),
+        rightMargin=1.2 * cm,
+        leftMargin=1.2 * cm,
+        topMargin=1.2 * cm,
+        bottomMargin=1.2 * cm
+    )
+
+    styles = getSampleStyleSheet()
+
+    styles.add(
+        ParagraphStyle(
+            name="TitleCenter",
+            parent=styles["Title"],
+            alignment=TA_CENTER,
+            fontSize=18,
+            leading=22
         )
     )
 
-st.divider()
+    styles.add(
+        ParagraphStyle(
+            name="TableHeader",
+            parent=styles["Normal"],
+            fontSize=7,
+            leading=9,
+            alignment=TA_CENTER
+        )
+    )
 
-st.caption(
-    "Generator HACCP V2 | Rancangan untuk validasi Tim HACCP | "
-    "Bukan sertifikat HACCP"
+    styles.add(
+        ParagraphStyle(
+            name="Small",
+            parent=styles["Normal"],
+            fontSize=6.5,
+            leading=8
+        )
+    )
+
+    story = []
+
+    ingredient = metadata.get(
+        "Nama bahan",
+        "Bahan"
+    )
+
+    story.append(
+        Paragraph(
+            "DOKUMEN HACCP PER BAHAN",
+            styles["TitleCenter"]
+        )
+    )
+
+    story.append(
+        Paragraph(
+            paragraph_text(
+                f"Nama bahan: {ingredient}"
+            ),
+            styles["Heading2"]
+        )
+    )
+
+    story.append(
+        Paragraph(
+            paragraph_text(
+                f"Nama dapur/SPPG: "
+                f"{metadata.get('Nama dapur/SPPG', '')}"
+            ),
+            styles["Normal"]
+        )
+    )
+
+    story.append(
+        Paragraph(
+            paragraph_text(
+                f"Penanggung jawab: "
+                f"{metadata.get('Penanggung jawab', '')}"
+            ),
+            styles["Normal"]
+        )
+    )
+
+    story.append(
+        Paragraph(
+            paragraph_text(
+                f"Tanggal dokumen: "
+                f"{metadata.get('Tanggal', '')}"
+            ),
+            styles["Normal"]
+        )
+    )
+
+    story.append(Spacer(1, 10))
+
+    if wiki_data.get("description"):
+        story.append(
+            Paragraph(
+                "<b>Ringkasan Wikipedia:</b><br/>"
+                + paragraph_text(
+                    wiki_data.get("description")
+                ),
+                styles["Normal"]
+            )
+        )
+
+    story.append(
+        Paragraph(
+            "<b>Sumber gambar/informasi:</b> "
+            + paragraph_text(
+                wiki_data.get("wikipedia_url", "")
+            ),
+            styles["Small"]
+        )
+    )
+
+    story.append(Spacer(1, 12))
+
+    for section_name, section_data in haccp_data.items():
+
+        story.append(
+            Paragraph(
+                paragraph_text(
+                    section_name.replace("_", " ").upper()
+                ),
+                styles["Heading2"]
+            )
+        )
+
+        if isinstance(section_data, dict):
+            df = flatten_simple_dict(
+                section_data
+            )
+
+        elif isinstance(section_data, list):
+            df = list_to_dataframe(
+                section_data
+            )
+
+        else:
+            df = pd.DataFrame({
+                "Keterangan": [section_data]
+            })
+
+        story.append(
+            dataframe_to_pdf_table(
+                df,
+                styles
+            )
+        )
+
+        story.append(Spacer(1, 12))
+
+    story.append(
+        Paragraph(
+            "<b>CATATAN PENTING:</b> "
+            "Dokumen ini merupakan draft hasil bantuan AI. "
+            "Semua bahaya, CCP, suhu, waktu, batas kritis, "
+            "dan tindakan koreksi harus diverifikasi oleh "
+            "tim HACCP berdasarkan proses nyata, alat ukur, "
+            "pemasok, regulasi dan kondisi operasional SPPG.",
+            styles["Normal"]
+        )
+    )
+
+    doc.build(story)
+
+    output.seek(0)
+
+    return output
+
+
+# =========================================================
+# TAMPILKAN DATA JSON
+# =========================================================
+
+def show_section(section_title, section_data):
+    """
+    Menampilkan satu bagian hasil HACCP.
+    """
+
+    st.subheader(
+        section_title.replace("_", " ").title()
+    )
+
+    if isinstance(section_data, dict):
+        for key, value in section_data.items():
+
+            st.markdown(
+                f"**{key.replace('_', ' ').title()}**"
+            )
+
+            if isinstance(value, list):
+                for item in value:
+                    st.write(f"- {item}")
+
+            elif isinstance(value, dict):
+                st.json(value)
+
+            else:
+                st.write(value)
+
+    elif isinstance(section_data, list):
+
+        if section_data and isinstance(
+            section_data[0],
+            dict
+        ):
+            st.dataframe(
+                pd.DataFrame(section_data),
+                use_container_width=True
+            )
+
+        else:
+            for item in section_data:
+                st.write(f"- {item}")
+
+    else:
+        st.write(section_data)
+
+
+# =========================================================
+# SIDEBAR
+# =========================================================
+
+st.sidebar.title("⚙️ Pengaturan")
+
+st.sidebar.markdown(
+    """
+Masukkan API Key OpenAI agar sistem dapat
+menganalisis bahan secara otomatis.
+"""
 )
+
+api_key_input = st.sidebar.text_input(
+    "OPENAI_API_KEY",
+    type="password",
+    help=(
+        "Jangan tampilkan API Key di GitHub. "
+        "Gunakan Streamlit Secrets."
+    )
+)
+
+if api_key_input:
+    st.session_state["api_key"] = api_key_input
+
+facility = st.sidebar.text_input(
+    "Nama Dapur/SPPG",
+    value="SPPG Pangkajene dan Kepulauan Segeri"
+)
+
+responsible_person = st.sidebar.text_input(
+    "Penanggung Jawab",
+    value="Ahli Gizi"
+)
+
+intended_use = st.sidebar.text_area(
+    "Tujuan Penggunaan Bahan",
+    value=(
+        "Digunakan sebagai bahan makanan "
+        "dalam produksi MBG/SPPG."
+    )
+)
+
+vulnerable_groups = st.sidebar.text_area(
+    "Kelompok Penerima Manfaat",
+    value=(
+        "Anak sekolah, balita jika relevan, "
+        "ibu hamil/menyusui jika relevan, "
+        "dan kelompok rentan lainnya."
+    )
+)
+
+process_description = st.sidebar.text_area(
+    "Gambaran Proses",
+    value=(
+        "Penerimaan bahan → penyimpanan → "
+        "sortasi → pencucian/persiapan → "
+        "pengolahan → pemorsian → distribusi."
+    )
+)
+
+
+# =========================================================
+# HALAMAN UTAMA
+# =========================================================
+
+st.title("🧪 Generator HACCP Per Bahan")
+
+st.write(
+    """
+Masukkan **satu nama bahan saja**. Sistem akan mencari
+informasi umum melalui Wikipedia Indonesia dan meminta AI
+menyusun analisis HACCP yang lebih rinci.
+"""
+)
+
+ingredient = st.text_input(
+    "Nama bahan yang ingin dianalisis",
+    placeholder=(
+        "Contoh: bayam, kangkung, ayam, udang, telur, "
+        "daging sapi, tahu, tempe"
+    )
+)
+
+generate_button = st.button(
+    "🔍 Cari Informasi dan Buat HACCP",
+    type="primary"
+)
+
+
+# =========================================================
+# PROSES GENERATE
+# =========================================================
+
+if generate_button:
+
+    if not ingredient.strip():
+        st.warning(
+            "Silakan masukkan nama bahan terlebih dahulu."
+        )
+        st.stop()
+
+    if not get_openai_client():
+        st.error(
+            "OPENAI_API_KEY belum tersedia. "
+            "Masukkan API Key di sidebar atau "
+            "gunakan Streamlit Secrets."
+        )
+        st.stop()
+
+    with st.spinner(
+        "Mencari informasi Wikipedia Indonesia..."
+    ):
+        wiki_data = search_wikipedia_image(
+            ingredient.strip()
+        )
+
+    if wiki_data.get("image"):
+        st.image(
+            wiki_data["image"],
+            caption=(
+                f"Gambar referensi Wikipedia: "
+                f"{wiki_data.get('title', ingredient)}"
+            ),
+            width=280
+        )
+    else:
+        st.info(
+            "Gambar Wikipedia tidak ditemukan. "
+            "Analisis tetap dapat dilanjutkan."
+        )
+
+    with st.spinner(
+        "AI sedang menyusun analisis HACCP per bahan..."
+    ):
+        try:
+
+            haccp_data = generate_haccp_with_ai(
+                ingredient=ingredient.strip(),
+                facility=facility,
+                responsible_person=responsible_person,
+                intended_use=intended_use,
+                process_description=process_description,
+                vulnerable_groups=vulnerable_groups,
+                wikipedia_description=wiki_data.get(
+                    "description",
+                    ""
+                )
+            )
+
+            st.session_state["haccp_data"] = haccp_data
+            st.session_state["wiki_data"] = wiki_data
+            st.session_state["ingredient"] = ingredient.strip()
+
+            st.success(
+                "Analisis HACCP berhasil dibuat."
+            )
+
+        except Exception as error:
+            st.error(
+                "Gagal membuat analisis HACCP."
+            )
+            st.exception(error)
+
+
+# =========================================================
+# TAMPILKAN HASIL
+# =========================================================
+
+if "haccp_data" in st.session_state:
+
+    haccp_data = st.session_state["haccp_data"]
+    wiki_data = st.session_state["wiki_data"]
+    saved_ingredient = st.session_state["ingredient"]
+
+    metadata = {
+        "Nama bahan": saved_ingredient,
+        "Nama dapur/SPPG": facility,
+        "Penanggung jawab": responsible_person,
+        "Tanggal": datetime.now().strftime(
+            "%d-%m-%Y %H:%M"
+        ),
+        "Tujuan penggunaan": intended_use,
+        "Kelompok penerima manfaat": vulnerable_groups,
+        "Gambaran proses": process_description
+    }
+
+    st.divider()
+
+    st.header(
+        f"📋 Hasil HACCP: {saved_ingredient}"
+    )
+
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "Ringkasan Bahan",
+        "Analisis Bahaya",
+        "CCP dan Monitoring",
+        "Catatan Validasi",
+        "Export"
+    ])
+
+    with tab1:
+
+        show_section(
+            "identitas_bahan",
+            haccp_data.get(
+                "identitas_bahan",
+                {}
+            )
+        )
+
+        st.subheader(
+            "Informasi Wikipedia Indonesia"
+        )
+
+        st.write(
+            wiki_data.get(
+                "description",
+                "Tidak tersedia."
+            )
+        )
+
+        st.markdown(
+            f"[Buka Wikipedia Indonesia]("
+            f"{wiki_data.get('wikipedia_url', '')}"
+            f")"
+        )
+
+        show_section(
+            "tugas_pendahuluan",
+            haccp_data.get(
+                "tugas_pendahuluan",
+                {}
+            )
+        )
+
+    with tab2:
+
+        show_section(
+            "analisis_bahaya",
+            haccp_data.get(
+                "analisis_bahaya",
+                []
+            )
+        )
+
+        show_section(
+            "penerimaan_bahan",
+            haccp_data.get(
+                "penerimaan_bahan",
+                {}
+            )
+        )
+
+        show_section(
+            "penyimpanan",
+            haccp_data.get(
+                "penyimpanan",
+                {}
+            )
+        )
+
+        show_section(
+            "persiapan_bahan",
+            haccp_data.get(
+                "persiapan_bahan",
+                {}
+            )
+        )
+
+        show_section(
+            "proses_pengolahan",
+            haccp_data.get(
+                "proses_pengolahan",
+                {}
+            )
+        )
+
+    with tab3:
+
+        show_section(
+            "penentuan_ccp",
+            haccp_data.get(
+                "penentuan_ccp",
+                []
+            )
+        )
+
+        show_section(
+            "rencana_ccp",
+            haccp_data.get(
+                "rencana_ccp",
+                []
+            )
+        )
+
+        show_section(
+            "monitoring_dan_verifikasi",
+            haccp_data.get(
+                "monitoring_dan_verifikasi",
+                []
+            )
+        )
+
+        show_section(
+            "tindakan_koreksi_umum",
+            haccp_data.get(
+                "tindakan_koreksi_umum",
+                []
+            )
+        )
+
+    with tab4:
+
+        show_section(
+            "dokumen_rekaman",
+            haccp_data.get(
+                "dokumen_rekaman",
+                []
+            )
+        )
+
+        show_section(
+            "catatan_validasi",
+            haccp_data.get(
+                "catatan_validasi",
+                []
+            )
+        )
+
+        st.subheader("Kesimpulan")
+
+        st.write(
+            haccp_data.get(
+                "kesimpulan",
+                ""
+            )
+        )
+
+        st.warning(
+            """
+            Periksa kembali seluruh suhu, waktu, batas kritis,
+            metode sanitasi, alur produksi, dan status CCP.
+            Jangan langsung menjadikan hasil AI sebagai SOP final
+            sebelum divalidasi oleh tim HACCP.
+            """
+        )
+
+    with tab5:
+
+        st.subheader(
+            "📊 Export Dokumen"
+        )
+
+        st.write(
+            """
+            Pilih format dokumen yang ingin disimpan.
+            """
+        )
+
+        excel_file = create_excel_file(
+            haccp_data=haccp_data,
+            wiki_data=wiki_data,
+            metadata=metadata
+        )
+
+        pdf_file = create_pdf_file(
+            haccp_data=haccp_data,
+            wiki_data=wiki_data,
+            metadata=metadata
+        )
+
+        json_file = json.dumps(
+            {
+                "metadata": metadata,
+                "wikipedia": wiki_data,
+                "haccp": haccp_data
+            },
+            ensure_ascii=False,
+            indent=2
+        ).encode("utf-8")
+
+        file_base = clean_filename(
+            saved_ingredient
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            st.download_button(
+                label="⬇️ Download Excel",
+                data=excel_file,
+                file_name=(
+                    f"HACCP_{file_base}.xlsx"
+                ),
+                mime=(
+                    "application/vnd.openxmlformats-"
+                    "officedocument.spreadsheetml.sheet"
+                )
+            )
+
+        with col2:
+
+            st.download_button(
+                label="⬇️ Download PDF",
+                data=pdf_file,
+                file_name=(
+                    f"HACCP_{file_base}.pdf"
+                ),
+                mime="application/pdf"
+            )
+
+        with col3:
+
+            st.download_button(
+                label="⬇️ Download JSON",
+                data=json_file,
+                file_name=(
+                    f"HACCP_{file_base}.json"
+                ),
+                mime="application/json"
+            )
+
+        st.info(
+            """
+            File Excel berisi beberapa sheet seperti:
+            identitas, Wikipedia, analisis bahaya,
+            penerimaan, penyimpanan, persiapan,
+            proses pengolahan, CCP, monitoring,
+            tindakan koreksi, dan validasi.
+            """
+        )
